@@ -76,7 +76,7 @@
             <size key="customSize" width="139" height="122"/>
             <connections>
                 <outlet property="movieGenreLabel" destination="Lsm-p5-FJS" id="O8b-PZ-T4I"/>
-                <outlet property="movieImageView" destination="xDk-j4-eV7" id="7m3-II-hsW"/>
+                <outlet property="movieImageView" destination="xDk-j4-eV7" id="7NO-oe-W4f"/>
                 <outlet property="movieRatingLabel" destination="ZeR-Nm-cNC" id="9fj-Px-00S"/>
                 <outlet property="movieTitleLabel" destination="cum-WB-mvi" id="G2t-jT-fhc"/>
                 <outlet property="movieTitleLabelHeightConstraint" destination="XJr-pH-geB" id="Ckb-Cw-rPb"/>

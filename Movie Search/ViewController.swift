@@ -9,36 +9,57 @@ import UIKit
 
 class ViewController: UIViewController {
 
-    //Outlets
+    // MARK: Outlets
     @IBOutlet private weak var movieCollectionView: UICollectionView!
-    var largestTitleLabelHeight: CGFloat = 20.5
-    
     var listOfMovies = [MovieResult]()
     var genreMap: [IndexPath: [Genre]] = [:]
-    
-    
+    var movieMap: [IndexPath: [MovieResult]] = [:]
+    let movieRequest = MovieRequest()
+    var largestTitleLabelHeight: CGFloat = 20.5
+    let numberOfHorizontalCells: CGFloat = 3
+    let numberOfVerticalCells: CGFloat = 5
+    let horizontalSpacing: CGFloat = 4
+    let verticalSpacing: CGFloat = 5
+    let movieCollectionViewCellString = "MovieCollectionViewCell"
+
     override func viewDidLoad() {
         super.viewDidLoad()
-        
-        let bundle = Bundle(for: type(of: self))
-        let nib = UINib(nibName: "MovieCollectionViewCell", bundle: bundle)
-        movieCollectionView.register(nib, forCellWithReuseIdentifier: "MovieCollectionViewCell")
-    
+
+        registerCollectionViewCell()
     }
-    
+
+    fileprivate func registerCollectionViewCell() {
+        let bundle = Bundle(for: type(of: self))
+        let nib = UINib(nibName: movieCollectionViewCellString, bundle: bundle)
+        movieCollectionView.register(nib, forCellWithReuseIdentifier: movieCollectionViewCellString)
+    }
+
     @IBAction func searchButtonTapped(_ sender: Any) {
-        DispatchQueue.main.async (qos: .default) {
-            self.getMoviesNowPlaying()
+        DispatchQueue.main.async(qos: .default) {
+            self.retrieveMoviesNowPlaying()
         }
+    }
+
+    func loadMovieImage(urlString: String, indexPath: IndexPath,
+                        completionHandler: @escaping(IndexPath, UIImage) -> Void) {
+        guard let url = URL(string: urlString) else { return }
+        let task = URLSession.shared.dataTask(with: url) { data, _, error in
+            guard let data = data, error == nil else {
+                return
+            }
+            DispatchQueue.main.async {
+                guard let image = UIImage(data: data) else { return }
+                completionHandler(indexPath, image)
+            }
+        }
+        task.resume()
     }
 }
 
-//Data Source
+// MARK: Data Source Delegate
 extension ViewController: UICollectionViewDataSource {
-    //Data Source
-    func getMoviesNowPlaying() {
-        let movieRequest = MovieRequest()
-        movieRequest.getMoviesInCinemas { [weak self] result in
+    func retrieveMoviesNowPlaying() {
+        movieRequest.fetchMoviesInCinemas { [weak self] result in
             switch result {
             case .failure(let error):
                 print(error)
@@ -51,11 +72,10 @@ extension ViewController: UICollectionViewDataSource {
             }
         }
     }
-    
-    func getMovieGenres(id: Int, indexPath: IndexPath) {
-        let movieRequest = MovieRequest()
-        movieRequest.getMovieGenre(id: id, indexPath: indexPath) { [weak self] result, indexPath in
-            switch result{
+
+    func retrieveMovieGenres(movieId: Int, indexPath: IndexPath) {
+        movieRequest.fetchGenreDetail(movieId: movieId, indexPath: indexPath) { [weak self] result, indexPath in
+            switch result {
             case .failure(let error):
                 print(error)
 
@@ -63,59 +83,78 @@ extension ViewController: UICollectionViewDataSource {
                 self?.genreMap[indexPath] = genres
                 DispatchQueue.main.async {
                     let cell = self?.movieCollectionView.cellForItem(at: indexPath) as? MovieCollectionViewCell
-                    //Accessing the movie object and set movie title abd rating to it's related labels
-                    cell?.updateMovieGenre(with: genres)
+                    // Accessing the movie object and set movie title abd rating to it's related labels
+                    cell?.updateMovieGenre(genre: genres)
                 }
             }
         }
     }
-    
+
     func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
-        return listOfMovies.count
+        listOfMovies.count
     }
-    
+
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
         let movie = listOfMovies[indexPath.row]
-        let id = movie.id
-        getMovieGenres(id: id, indexPath: indexPath)
+        retrieveMovieGenres(movieId: movie.id, indexPath: indexPath)
     }
-    
-    func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
-        guard let cell = movieCollectionView.dequeueReusableCell(withReuseIdentifier: "MovieCollectionViewCell", for: indexPath) as? MovieCollectionViewCell else {return UICollectionViewCell()}
-        
-        let target = 1
-        //Accessing the movie object and set movie title abd rating to it's related labels
-        if target >= listOfMovies.startIndex && target < listOfMovies.endIndex {
+
+    func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) ->
+    UICollectionViewCell { guard let cell = movieCollectionView.dequeueReusableCell(
+                                    withReuseIdentifier: movieCollectionViewCellString,
+                                    for: indexPath) as? MovieCollectionViewCell else {return UICollectionViewCell()}
+
+        let movieTarget = 1
+        // Accessing the movie object and set movie title abd rating to it's related labels
+        if movieTarget >= listOfMovies.startIndex && movieTarget < listOfMovies.endIndex {
             let movie = listOfMovies[indexPath.row]
-            cell.updateMovieTitleAndRating(with: movie.title, with: movie.voteAverage)
-            cell.loadMovieImage(with: movie.backdropURL.description)
+            cell.updateMovieTitleRating(movie.title, movie.voteAverage)
+            loadMovieImage(urlString: movie.backdropURL.description,
+                           indexPath: indexPath, completionHandler: { indexPath, movieImage in
+                cell.updateMovieImage(movieImage: movieImage)
+            })
         }
-        
         if cell.currentTitleLabelHeight > largestTitleLabelHeight {
             largestTitleLabelHeight = cell.currentTitleLabelHeight
         }
         return cell
     }
-    
-    func collectionView(_ collectionView: UICollectionView, willDisplay cell: UICollectionViewCell, forItemAt indexPath: IndexPath) {
+
+    func collectionView(_ collectionView: UICollectionView, willDisplay cell: UICollectionViewCell,
+                        forItemAt indexPath: IndexPath) {
         let cell = cell as? MovieCollectionViewCell
         cell?.updateTitleLabelHeight(to: largestTitleLabelHeight)
     }
 }
 
-extension ViewController: UICollectionViewDelegateFlowLayout{
-    
-    func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout, sizeForItemAt indexPath: IndexPath) -> CGSize {
-        let cellWidth = (collectionView.bounds.width - 8) / 3
+extension ViewController: UICollectionViewDelegateFlowLayout {
 
-        return CGSize(width: cellWidth , height: 350)
+    func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout,
+                        sizeForItemAt indexPath: IndexPath) -> CGSize {
+        /*let cellWidth = (collectionView.bounds.width - (horizontalSpacing * 2)) / numberOfCellsInRow
+
+        return CGSize(width: cellWidth, height: 350)*/
+
+        return sizeForItem()
     }
 
-    func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout, minimumInteritemSpacingForSectionAt section: Int) -> CGFloat {
-        return 4
+    private func sizeForItem() -> CGSize {
+        if traitCollection.horizontalSizeClass == .compact && traitCollection.verticalSizeClass == .regular {
+            let cellWidth = (movieCollectionView.bounds.width - (horizontalSpacing * 2)) / numberOfHorizontalCells
+            return CGSize(width: cellWidth, height: 300)
+        } else {
+            let cellWidth = (movieCollectionView.bounds.width - (horizontalSpacing * 4)) / numberOfVerticalCells
+            return CGSize(width: cellWidth, height: 300)
+        }
     }
 
-    func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout, minimumLineSpacingForSectionAt section: Int) -> CGFloat {
-        return 10
+    func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout,
+                        minimumInteritemSpacingForSectionAt section: Int) -> CGFloat {
+        return horizontalSpacing
+    }
+
+    func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout,
+                        minimumLineSpacingForSectionAt section: Int) -> CGFloat {
+        return verticalSpacing
     }
 }
